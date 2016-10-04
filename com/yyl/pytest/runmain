@@ -1,0 +1,102 @@
+#!/usr/bin/python
+# -*- coding:UTF-8 -*-
+__author__ = 'yyl'
+
+import optparse
+import os
+import sys
+
+import pytest
+
+from model import env
+
+
+def parse_opts():
+    ''' 解析 runmain 脚本的指令参数 '''
+    usage = '\n %prog [options] <cases_folder|cases_file>'
+    usage += '\n -h,--help   show help and exit'
+    parser = optparse.OptionParser(usage=usage, version='1.0 v')
+
+    # 解析py.test原生参数
+    parser.add_option('--debug', dest='debug', action='store_true', help='enter debug mode')
+
+    # 解析测试例自定义参数
+    parser.add_option('--config', dest='config', type='str', help='param in config file')
+
+    # python xxx.py  --debug  ss ww
+    # 会被解析成
+    # opts={'debug': True, 'config': None}
+    # args = [ss,ww]
+    opts, args = parser.parse_args()
+
+    return parser, opts, args
+
+
+def params_pytest(opts, args):
+    ''' 封装 py.test 执行 main方法需要的参数'''
+    params = []  # py.test 参数
+    params.append('-v')  # show case in list format
+    params.append('-rfEsx')  # print fail, error, skip, xfail info
+    params.extend(['--color', 'yes'])  # colored output
+    params.append(args[0])  # 待测的测试例或者测试例文件夹
+
+    # debug 模式
+    if opts.debug:
+        print("##########Enter Debug Mode###########")
+        params.append('-s')  # 打印 print
+        if '--runxfail' not in params:
+            params.append('--runxfail')  # run tests even if they are marked xfail
+
+        sys.path.append(os.getcwd())
+        lib_path = '%s/lib' % os.getcwd()
+        for f in os.listdir(lib_path):
+            d = '%s/%s' % (lib_path, f)
+            if os.path.isdir(d):
+                sys.path.append(d)
+
+        # 加载py.test 的插件
+        params.extend(['-p', 'pytest_adapter.logging_adapter'])
+        # params.extend(['-p', 'pytest_adapter.repeat_adapter'])
+        # params.extend(['-p', 'pytest_adapter.kelude_adapter'])
+        #params.extend(['-p', 'pytest_adapter.rerun_adapter'])
+        #params.extend(['-p', 'pytest_adapter.casedoc_adapter'])
+
+    return params
+
+
+def print_msg(type, msg):
+    print('%s %s' % (type, msg) )
+
+
+def main():
+    code = 1
+
+    parser, opts, args = parse_opts()
+    print parser, opts, args
+    if len(args) != 1:
+        print_msg('[ERROR]', '缺少测试例文件|文件夹参数')
+        return code
+
+    if opts.config:
+        # env.load(opts.master_sls, 'yaml')
+        env.options = {}
+        env.options['config'] = opts.config
+    else:
+        print_msg('[ERROR]', '缺少 --config 参数')
+        return code
+
+    params = params_pytest(opts, args)
+
+
+
+
+    # 获得py.test的main方法
+    pytest_main = getattr(pytest, 'main')
+    # 传入参数执行py.test的main方法
+    code = pytest_main(params)
+    return code
+
+# >python runmain --config=config/a.json test
+
+if __name__ == '__main__':
+    sys.exit(main())
